@@ -2,6 +2,7 @@ package sarama
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -47,6 +48,81 @@ type AsyncProducer interface {
 	Errors() <-chan *ProducerError
 }
 
+// TransactionManager keeps the state necessary to ensure idempotent production
+type TransactionManager interface {
+	// Return true if Idempotency is enabled
+	Idempotent() bool
+
+	// Returns the current ProducerID
+	ProducerID() int64
+
+	// Returns the current ProducerEpoch
+	ProducerEpoch() int16
+
+	// Returns the next available sequence number
+	GetAndIncrementSequenceNumber(topic string, partition int32) int32
+}
+
+type transactionManager struct {
+	idempotent      bool
+	producerID      int64
+	producerEpoch   int16
+	sequenceNumbers map[string]int32
+	mutex           sync.Mutex
+}
+
+func (t *transactionManager) Idempotent() bool {
+	return t.idempotent
+}
+
+func (t *transactionManager) ProducerID() int64 {
+	return t.producerID
+}
+
+func (t *transactionManager) ProducerEpoch() int16 {
+	return t.producerEpoch
+}
+
+func (t *transactionManager) GetAndIncrementSequenceNumber(topic string, partition int32) int32 {
+	key := fmt.Sprintf("%s-%d", topic, partition)
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	sequence := t.sequenceNumbers[key]
+	t.sequenceNumbers[key] = sequence + 1
+	return sequence
+}
+
+func newTransactionManager(conf *Config, client Client) (TransactionManager, error) {
+	var pid int64 = -1
+	var epoch int16 = -1
+	if conf.Producer.Idempotent {
+		if !conf.Version.IsAtLeast(V0_11_0_0) {
+			return nil, ConfigurationError("You must set Version to at least 0.11 when using the Idempotent producer")
+		}
+		if conf.Producer.Retry.Max == 0 {
+			return nil, ConfigurationError("You must set Retry.Max to at least 1 when using the Idempotent producer")
+		}
+		if conf.Net.MaxOpenRequests > 5 {
+			return nil, ConfigurationError("You must set Net.MaxOpenRequests to at most 5 when using the Idempotent producer")
+		}
+		initProducerIDResponse, err := client.InitProducerID()
+		if err != nil {
+			return nil, errors.New("Unable to retrieve a ProducerID")
+		}
+		pid = initProducerIDResponse.ProducerID
+		epoch = initProducerIDResponse.ProducerEpoch
+	}
+
+	txnmgr := &transactionManager{
+		idempotent:      conf.Producer.Idempotent,
+		producerID:      pid,
+		producerEpoch:   epoch,
+		sequenceNumbers: make(map[string]int32),
+		mutex:           sync.Mutex{},
+	}
+	return txnmgr, nil
+}
+
 type asyncProducer struct {
 	client    Client
 	conf      *Config
@@ -59,6 +135,8 @@ type asyncProducer struct {
 	brokers    map[*Broker]chan<- *ProducerMessage
 	brokerRefs map[chan<- *ProducerMessage]int
 	brokerLock sync.Mutex
+
+	txnmgr TransactionManager
 }
 
 // NewAsyncProducer creates a new AsyncProducer using the given broker addresses and configuration.
@@ -84,6 +162,11 @@ func NewAsyncProducerFromClient(client Client) (AsyncProducer, error) {
 		return nil, ErrClosedClient
 	}
 
+	txnmgr, err := newTransactionManager(client.Config(), client)
+	if err != nil {
+		return nil, err
+	}
+
 	p := &asyncProducer{
 		client:     client,
 		conf:       client.Config(),
@@ -93,6 +176,7 @@ func NewAsyncProducerFromClient(client Client) (AsyncProducer, error) {
 		retries:    make(chan *ProducerMessage),
 		brokers:    make(map[*Broker]chan<- *ProducerMessage),
 		brokerRefs: make(map[chan<- *ProducerMessage]int),
+		txnmgr:     txnmgr,
 	}
 
 	// launch our singleton dispatchers
@@ -145,9 +229,10 @@ type ProducerMessage struct {
 	// least version 0.10.0.
 	Timestamp time.Time
 
-	retries     int
-	flags       flagSet
-	expectation chan *ProducerError
+	retries        int
+	flags          flagSet
+	expectation    chan *ProducerError
+	sequenceNumber int32
 }
 
 const producerMessageOverhead = 26 // the metadata overhead of CRC, flags, etc.
@@ -327,6 +412,9 @@ func (tp *topicProducer) dispatch() {
 				tp.parent.returnError(msg, err)
 				continue
 			}
+		}
+		if msg.retries == 0 {
+			msg.sequenceNumber = tp.parent.txnmgr.GetAndIncrementSequenceNumber(msg.Topic, msg.Partition)
 		}
 
 		handler := tp.handlers[msg.Partition]

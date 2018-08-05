@@ -61,10 +61,10 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 			batch := &RecordBatch{
 				FirstTimestamp:   timestamp,
 				Version:          2,
-				ProducerID:       -1, /* No producer id */
 				Codec:            ps.parent.conf.Producer.Compression,
 				CompressionLevel: ps.parent.conf.Producer.CompressionLevel,
 			}
+			ps.setProducerState(batch, msg.Topic, msg.Partition, msg.sequenceNumber)
 			set = &partitionSet{recordsToSend: newDefaultRecords(batch)}
 			size = recordBatchOverhead
 		} else {
@@ -106,6 +106,14 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 	ps.bufferCount++
 
 	return nil
+}
+
+func (ps *produceSet) setProducerState(batch *RecordBatch, topic string, partition int32, sequence int32) {
+	if ps.parent.txnmgr.Idempotent() {
+		batch.ProducerID = ps.parent.txnmgr.ProducerID()
+		batch.ProducerEpoch = ps.parent.txnmgr.ProducerEpoch()
+		batch.FirstSequence = sequence
+	}
 }
 
 func (ps *produceSet) buildRequest() *ProduceRequest {
