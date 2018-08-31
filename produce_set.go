@@ -110,6 +110,7 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 
 func (ps *produceSet) setProducerState(batch *RecordBatch, topic string, partition int32, sequence int32) {
 	if ps.parent.txnmgr.Idempotent() {
+		Logger.Printf("Creating a new idempotent batch with base sequence %d\n", sequence)
 		batch.ProducerID = ps.parent.txnmgr.ProducerID()
 		batch.ProducerEpoch = ps.parent.txnmgr.ProducerEpoch()
 		batch.FirstSequence = sequence

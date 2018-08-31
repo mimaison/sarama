@@ -89,6 +89,7 @@ func (t *transactionManager) GetAndIncrementSequenceNumber(topic string, partiti
 	defer t.mutex.Unlock()
 	sequence := t.sequenceNumbers[key]
 	t.sequenceNumbers[key] = sequence + 1
+	Logger.Printf("Retriving sequenceNumber of %s, was %d\n", key, sequence)
 	return sequence
 }
 
@@ -107,10 +108,13 @@ func newTransactionManager(conf *Config, client Client) (TransactionManager, err
 		}
 		initProducerIDResponse, err := client.InitProducerID()
 		if err != nil {
-			return nil, errors.New("Unable to retrieve a ProducerID")
+			return nil, errors.New("Unable to retrieve a ProducerID\n")
 		}
 		pid = initProducerIDResponse.ProducerID
 		epoch = initProducerIDResponse.ProducerEpoch
+		Logger.Printf("Obtained a ProducerId: %v\n", pid)
+	} else {
+		Logger.Printf("Not idempotent")
 	}
 
 	txnmgr := &transactionManager{
@@ -415,6 +419,7 @@ func (tp *topicProducer) dispatch() {
 		}
 		if msg.retries == 0 {
 			msg.sequenceNumber = tp.parent.txnmgr.GetAndIncrementSequenceNumber(msg.Topic, msg.Partition)
+			Logger.Printf("Message %s got sequence number: %d\n", msg.Value, msg.sequenceNumber)
 		}
 
 		handler := tp.handlers[msg.Partition]
