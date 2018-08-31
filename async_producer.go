@@ -417,7 +417,7 @@ func (tp *topicProducer) dispatch() {
 				continue
 			}
 		}
-		if msg.retries == 0 {
+		if tp.parent.txnmgr.Idempotent() && msg.retries == 0 {
 			msg.sequenceNumber = tp.parent.txnmgr.GetAndIncrementSequenceNumber(msg.Topic, msg.Partition)
 			Logger.Printf("Message %s got sequence number: %d\n", msg.Value, msg.sequenceNumber)
 		}
