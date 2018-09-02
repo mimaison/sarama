@@ -34,6 +34,6 @@ after_success:
 - bash <(curl -s https://codecov.io/bash)
 
 after_failure:
-- cat /tmp/kafka*/*.log
+- cat ${TRAVIS_BUILD_DIR}/kafka*/*.log
 
 after_script: vagrant/halt_cluster.sh
