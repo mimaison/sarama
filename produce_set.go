@@ -76,7 +76,7 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 	}
 	fmt.Printf("Adding message with sequence %d to batch for partition %s-%d\n", msg.sequenceNumber, msg.Topic, msg.Partition)
 	set.msgs = append(set.msgs, msg)
-	if msg.sequenceNumber < set.recordsToSend.RecordBatch.FirstSequence {
+	if ps.parent.conf.Version.IsAtLeast(V0_11_0_0) && msg.sequenceNumber < set.recordsToSend.RecordBatch.FirstSequence {
 		fmt.Printf("@@@@@@@@@@@@@@@@@ adding a message with a smaller sequence number than batch %d\n", set.recordsToSend.RecordBatch.FirstSequence)
 	}
 	if ps.parent.conf.Version.IsAtLeast(V0_11_0_0) {
@@ -116,10 +116,10 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 func (ps *produceSet) setProducerState(batch *RecordBatch, topic string, partition int32, sequence int32) {
 	if ps.parent.txnmgr.Idempotent() {
 		Logger.Printf("Creating a new idempotent batch with base sequence %d\n", sequence)
-		batch.ProducerID = ps.parent.txnmgr.ProducerID()
-		batch.ProducerEpoch = ps.parent.txnmgr.ProducerEpoch()
 		batch.FirstSequence = sequence
 	}
+	batch.ProducerID = ps.parent.txnmgr.ProducerID()
+	batch.ProducerEpoch = ps.parent.txnmgr.ProducerEpoch()
 }
 
 func (ps *produceSet) buildRequest() *ProduceRequest {
