@@ -2,6 +2,7 @@ package sarama
 
 import (
 	"encoding/binary"
+	"fmt"
 	"time"
 )
 
@@ -58,6 +59,7 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 	set := partitions[msg.Partition]
 	if set == nil {
 		if ps.parent.conf.Version.IsAtLeast(V0_11_0_0) {
+			fmt.Printf("Creating a new batch for partition %s-%d with base sequence %d \n", msg.Topic, msg.Partition, msg.sequenceNumber)
 			batch := &RecordBatch{
 				FirstTimestamp:   timestamp,
 				Version:          2,
@@ -72,8 +74,11 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 		}
 		partitions[msg.Partition] = set
 	}
-
+	fmt.Printf("Adding message with sequence %d to batch for partition %s-%d\n", msg.sequenceNumber, msg.Topic, msg.Partition)
 	set.msgs = append(set.msgs, msg)
+	if msg.sequenceNumber < set.recordsToSend.RecordBatch.FirstSequence {
+		fmt.Printf("@@@@@@@@@@@@@@@@@ adding a message with a smaller sequence number than batch %d\n", set.recordsToSend.RecordBatch.FirstSequence)
+	}
 	if ps.parent.conf.Version.IsAtLeast(V0_11_0_0) {
 		// We are being conservative here to avoid having to prep encode the record
 		size += maximumRecordOverhead
