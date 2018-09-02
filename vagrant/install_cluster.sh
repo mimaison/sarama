@@ -27,6 +27,7 @@ for i in 1 2 3 4 5; do
 
     # broker configuration
     cp ${REPOSITORY_ROOT}/vagrant/server.properties ${KAFKA_INSTALL_ROOT}/kafka-${KAFKA_PORT}/config/
+    cp ${REPOSITORY_ROOT}/vagrant/log4j.properties ${KAFKA_INSTALL_ROOT}/kafka-${KAFKA_PORT}/config/
     sed -i s/KAFKAID/${KAFKA_PORT}/g ${KAFKA_INSTALL_ROOT}/kafka-${KAFKA_PORT}/config/server.properties
     sed -i s/KAFKAPORT/${KAFKA_PORT_REAL}/g ${KAFKA_INSTALL_ROOT}/kafka-${KAFKA_PORT}/config/server.properties
     sed -i s/KAFKA_HOSTNAME/${KAFKA_HOSTNAME}/g ${KAFKA_INSTALL_ROOT}/kafka-${KAFKA_PORT}/config/server.properties
