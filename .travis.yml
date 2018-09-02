@@ -34,6 +34,10 @@ after_success:
 - bash <(curl -s https://codecov.io/bash)
 
 after_failure:
-- cat ${TRAVIS_BUILD_DIR}/kafka*/*.log
+- echo ">>>>>>>>> broker1" && cat ${TRAVIS_BUILD_DIR}/kafka1/server.log
+- echo ">>>>>>>>> broker2" && cat ${TRAVIS_BUILD_DIR}/kafka1/server.log
+- echo ">>>>>>>>> broker3" && cat ${TRAVIS_BUILD_DIR}/kafka1/server.log
+- echo ">>>>>>>>> broker4" && cat ${TRAVIS_BUILD_DIR}/kafka1/server.log
+- echo ">>>>>>>>> broker5" && cat ${TRAVIS_BUILD_DIR}/kafka1/server.log
 
 after_script: vagrant/halt_cluster.sh
