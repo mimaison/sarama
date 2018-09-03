@@ -44,7 +44,6 @@ func main() {
 	config := sarama.NewConfig()
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Return.Successes = true
-	config.Version = sarama.V0_11_0_0
 
 	switch *partitioner {
 	case "":
