@@ -805,6 +805,66 @@ func TestAsyncProducerIdempotent(t *testing.T) {
 	closeProducer(t, producer)
 }
 
+func TestAsyncProducerIdempotentRetry(t *testing.T) {
+	seedBroker := NewMockBroker(t, 1)
+	leader := NewMockBroker(t, 2)
+	leaderAddr := leader.Addr()
+
+	clusterID := "cid"
+	metadataResponse := &MetadataResponse{
+		Version:        3,
+		ThrottleTimeMs: 0,
+		ClusterID:      &clusterID,
+		ControllerID:   1,
+	}
+	metadataResponse.AddBroker(leaderAddr, leader.BrokerID())
+	metadataResponse.AddTopicPartition("my_topic", 0, leader.BrokerID(), nil, nil, ErrNoError)
+	seedBroker.Returns(metadataResponse)
+
+	initProducerID := &InitProducerIDResponse{
+		ThrottleTime:  0,
+		ProducerID:    1000,
+		ProducerEpoch: 1,
+	}
+	seedBroker.Returns(initProducerID)
+
+	config := NewConfig()
+	config.Producer.Flush.Messages = 10
+	config.Producer.Return.Successes = true
+	config.Producer.Retry.Max = 4
+	config.Producer.Retry.Backoff = 0
+	config.Producer.Idempotent = true
+	config.Version = V0_11_0_0
+	producer, err := NewAsyncProducer([]string{seedBroker.Addr()}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 10; i++ {
+		producer.Input() <- &ProducerMessage{Topic: "my_topic", Key: nil, Value: StringEncoder(TestMessage)}
+	}
+
+	prodNotLeader := &ProduceResponse{
+		Version:      3,
+		ThrottleTime: 0,
+	}
+	prodNotLeader.AddTopicPartition("my_topic", 0, ErrNotEnoughReplicas)
+	leader.Returns(prodNotLeader)
+
+	seedBroker.Returns(metadataResponse)
+
+	prodSuccess := &ProduceResponse{
+		Version:      3,
+		ThrottleTime: 0,
+	}
+	prodSuccess.AddTopicPartition("my_topic", 0, ErrNoError)
+	leader.Returns(prodSuccess)
+	expectResults(t, producer, 10, 0)
+	seedBroker.Close()
+	leader.Close()
+	closeProducer(t, producer)
+}
+
 // This example shows how to use the producer while simultaneously
 // reading the Errors channel to know about any failures.
 func ExampleAsyncProducer_select() {

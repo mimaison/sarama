@@ -108,13 +108,11 @@ func newTransactionManager(conf *Config, client Client) (TransactionManager, err
 		}
 		initProducerIDResponse, err := client.InitProducerID()
 		if err != nil {
-			return nil, errors.New("Unable to retrieve a ProducerID\n")
+			return nil, errors.New("Unable to retrieve a ProducerID")
 		}
 		pid = initProducerIDResponse.ProducerID
 		epoch = initProducerIDResponse.ProducerEpoch
 		Logger.Printf("Obtained a ProducerId: %v\n", pid)
-	} else {
-		Logger.Printf("Not idempotent")
 	}
 
 	txnmgr := &transactionManager{
