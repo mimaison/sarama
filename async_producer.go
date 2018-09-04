@@ -60,7 +60,7 @@ const (
 	noProducerEpoch = -1
 )
 
-func (t *transactionManager) GetAndIncrementSequenceNumber(topic string, partition int32) int32 {
+func (t *transactionManager) getAndIncrementSequenceNumber(topic string, partition int32) int32 {
 	key := fmt.Sprintf("%s-%d", topic, partition)
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -383,7 +383,7 @@ func (tp *topicProducer) dispatch() {
 			}
 		}
 		if tp.parent.conf.Producer.Idempotent && msg.retries == 0 {
-			msg.sequenceNumber = tp.parent.txnmgr.GetAndIncrementSequenceNumber(msg.Topic, msg.Partition)
+			msg.sequenceNumber = tp.parent.txnmgr.getAndIncrementSequenceNumber(msg.Topic, msg.Partition)
 			Logger.Printf("Message %s got sequence number: %d\n", msg.Value, msg.sequenceNumber)
 		}
 
