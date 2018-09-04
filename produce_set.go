@@ -69,7 +69,7 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 				ProducerID:       ps.parent.txnmgr.producerID,
 				ProducerEpoch:    ps.parent.txnmgr.producerEpoch,
 			}
-			if ps.parent.txnmgr.idempotent {
+			if ps.parent.conf.Producer.Idempotent {
 				batch.FirstSequence = msg.sequenceNumber
 			}
 			set = &partitionSet{recordsToSend: newDefaultRecords(batch)}

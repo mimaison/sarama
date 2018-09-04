@@ -2,17 +2,16 @@ package sarama
 
 import (
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 )
 
 func makeProduceSet() (*asyncProducer, *produceSet) {
+	conf := NewConfig()
+	txnmgr, _ := newTransactionManager(conf, nil)
 	parent := &asyncProducer{
-		conf: NewConfig(),
-		txnmgr: &transactionManager{
-			idempotent: false,
-		},
+		conf:   conf,
+		txnmgr: txnmgr,
 	}
 	return parent, newProduceSet(parent)
 }
@@ -259,23 +258,22 @@ func TestProduceSetV3RequestBuilding(t *testing.T) {
 }
 
 func TestProduceSetIdempotentRequestBuilding(t *testing.T) {
-	var pID int64 = 1000
-	var pEpoch int16 = 1234
+	const pID = 1000
+	const pEpoch = 1234
+
+	config := NewConfig()
+	config.Producer.RequiredAcks = WaitForAll
+	config.Producer.Idempotent = true
+	config.Version = V0_11_0_0
+
 	parent := &asyncProducer{
-		conf: NewConfig(),
+		conf: config,
 		txnmgr: &transactionManager{
-			idempotent:      true,
-			producerID:      pID,
-			producerEpoch:   pEpoch,
-			sequenceNumbers: make(map[string]int32),
-			mutex:           sync.Mutex{},
+			producerID:    pID,
+			producerEpoch: pEpoch,
 		},
 	}
 	ps := newProduceSet(parent)
-	parent.conf.Producer.RequiredAcks = WaitForAll
-	parent.conf.Producer.Timeout = 10 * time.Second
-	parent.conf.Version = V0_11_0_0
-	parent.conf.Producer.Idempotent = true
 
 	now := time.Now()
 	msg := &ProducerMessage{

@@ -49,12 +49,16 @@ type AsyncProducer interface {
 
 // transactionManager keeps the state necessary to ensure idempotent production
 type transactionManager struct {
-	idempotent      bool
 	producerID      int64
 	producerEpoch   int16
 	sequenceNumbers map[string]int32
 	mutex           sync.Mutex
 }
+
+const (
+	noProducerID    = -1
+	noProducerEpoch = -1
+)
 
 func (t *transactionManager) GetAndIncrementSequenceNumber(topic string, partition int32) int32 {
 	key := fmt.Sprintf("%s-%d", topic, partition)
@@ -67,25 +71,24 @@ func (t *transactionManager) GetAndIncrementSequenceNumber(topic string, partiti
 }
 
 func newTransactionManager(conf *Config, client Client) (*transactionManager, error) {
-	var pid int64 = -1
-	var epoch int16 = -1
+	txnmgr := &transactionManager{
+		producerID:    noProducerID,
+		producerEpoch: noProducerEpoch,
+	}
+
 	if conf.Producer.Idempotent {
 		initProducerIDResponse, err := client.InitProducerID()
 		if err != nil {
 			return nil, err
 		}
-		pid = initProducerIDResponse.ProducerID
-		epoch = initProducerIDResponse.ProducerEpoch
-		Logger.Printf("Obtained a ProducerId: %v\n", pid)
+		txnmgr.producerID = initProducerIDResponse.ProducerID
+		txnmgr.producerEpoch = initProducerIDResponse.ProducerEpoch
+		txnmgr.sequenceNumbers = make(map[string]int32)
+		txnmgr.mutex = sync.Mutex{}
+
+		Logger.Printf("Obtained a ProducerId: %d epoch: %d\n", txnmgr.producerID, txnmgr.producerEpoch)
 	}
 
-	txnmgr := &transactionManager{
-		idempotent:      conf.Producer.Idempotent,
-		producerID:      pid,
-		producerEpoch:   epoch,
-		sequenceNumbers: make(map[string]int32),
-		mutex:           sync.Mutex{},
-	}
 	return txnmgr, nil
 }
 
@@ -379,7 +382,7 @@ func (tp *topicProducer) dispatch() {
 				continue
 			}
 		}
-		if tp.parent.txnmgr.idempotent && msg.retries == 0 {
+		if tp.parent.conf.Producer.Idempotent && msg.retries == 0 {
 			msg.sequenceNumber = tp.parent.txnmgr.GetAndIncrementSequenceNumber(msg.Topic, msg.Partition)
 			Logger.Printf("Message %s got sequence number: %d\n", msg.Value, msg.sequenceNumber)
 		}
