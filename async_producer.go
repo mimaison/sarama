@@ -2,7 +2,6 @@ package sarama
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -48,39 +47,13 @@ type AsyncProducer interface {
 	Errors() <-chan *ProducerError
 }
 
-// TransactionManager keeps the state necessary to ensure idempotent production
-type TransactionManager interface {
-	// Return true if Idempotency is enabled
-	Idempotent() bool
-
-	// Returns the current ProducerID
-	ProducerID() int64
-
-	// Returns the current ProducerEpoch
-	ProducerEpoch() int16
-
-	// Returns the next available sequence number
-	GetAndIncrementSequenceNumber(topic string, partition int32) int32
-}
-
+// transactionManager keeps the state necessary to ensure idempotent production
 type transactionManager struct {
 	idempotent      bool
 	producerID      int64
 	producerEpoch   int16
 	sequenceNumbers map[string]int32
 	mutex           sync.Mutex
-}
-
-func (t *transactionManager) Idempotent() bool {
-	return t.idempotent
-}
-
-func (t *transactionManager) ProducerID() int64 {
-	return t.producerID
-}
-
-func (t *transactionManager) ProducerEpoch() int16 {
-	return t.producerEpoch
 }
 
 func (t *transactionManager) GetAndIncrementSequenceNumber(topic string, partition int32) int32 {
@@ -93,13 +66,13 @@ func (t *transactionManager) GetAndIncrementSequenceNumber(topic string, partiti
 	return sequence
 }
 
-func newTransactionManager(conf *Config, client Client) (TransactionManager, error) {
+func newTransactionManager(conf *Config, client Client) (*transactionManager, error) {
 	var pid int64 = -1
 	var epoch int16 = -1
 	if conf.Producer.Idempotent {
 		initProducerIDResponse, err := client.InitProducerID()
 		if err != nil {
-			return nil, errors.New("Unable to retrieve a ProducerID")
+			return nil, err
 		}
 		pid = initProducerIDResponse.ProducerID
 		epoch = initProducerIDResponse.ProducerEpoch
@@ -129,7 +102,7 @@ type asyncProducer struct {
 	brokerRefs map[chan<- *ProducerMessage]int
 	brokerLock sync.Mutex
 
-	txnmgr TransactionManager
+	txnmgr *transactionManager
 }
 
 // NewAsyncProducer creates a new AsyncProducer using the given broker addresses and configuration.
@@ -406,7 +379,7 @@ func (tp *topicProducer) dispatch() {
 				continue
 			}
 		}
-		if tp.parent.txnmgr.Idempotent() && msg.retries == 0 {
+		if tp.parent.txnmgr.idempotent && msg.retries == 0 {
 			msg.sequenceNumber = tp.parent.txnmgr.GetAndIncrementSequenceNumber(msg.Topic, msg.Partition)
 			Logger.Printf("Message %s got sequence number: %d\n", msg.Value, msg.sequenceNumber)
 		}

@@ -66,10 +66,10 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 				Version:          2,
 				Codec:            ps.parent.conf.Producer.Compression,
 				CompressionLevel: ps.parent.conf.Producer.CompressionLevel,
-				ProducerID:       ps.parent.txnmgr.ProducerID(),
-				ProducerEpoch:    ps.parent.txnmgr.ProducerEpoch(),
+				ProducerID:       ps.parent.txnmgr.producerID,
+				ProducerEpoch:    ps.parent.txnmgr.producerEpoch,
 			}
-			if ps.parent.txnmgr.Idempotent() {
+			if ps.parent.txnmgr.idempotent {
 				batch.FirstSequence = msg.sequenceNumber
 			}
 			set = &partitionSet{recordsToSend: newDefaultRecords(batch)}
