@@ -97,15 +97,6 @@ func newTransactionManager(conf *Config, client Client) (TransactionManager, err
 	var pid int64 = -1
 	var epoch int16 = -1
 	if conf.Producer.Idempotent {
-		if !conf.Version.IsAtLeast(V0_11_0_0) {
-			return nil, ConfigurationError("You must set Version to at least 0.11 when using the Idempotent producer")
-		}
-		if conf.Producer.Retry.Max == 0 {
-			return nil, ConfigurationError("You must set Retry.Max to at least 1 when using the Idempotent producer")
-		}
-		if conf.Net.MaxOpenRequests > 5 {
-			return nil, ConfigurationError("You must set Net.MaxOpenRequests to at most 5 when using the Idempotent producer")
-		}
 		initProducerIDResponse, err := client.InitProducerID()
 		if err != nil {
 			return nil, errors.New("Unable to retrieve a ProducerID")

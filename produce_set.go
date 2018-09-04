@@ -2,6 +2,7 @@ package sarama
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -65,8 +66,12 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 				Version:          2,
 				Codec:            ps.parent.conf.Producer.Compression,
 				CompressionLevel: ps.parent.conf.Producer.CompressionLevel,
+				ProducerID:       ps.parent.txnmgr.ProducerID(),
+				ProducerEpoch:    ps.parent.txnmgr.ProducerEpoch(),
 			}
-			ps.setProducerState(batch, msg.Topic, msg.Partition, msg.sequenceNumber)
+			if ps.parent.txnmgr.Idempotent() {
+				batch.FirstSequence = msg.sequenceNumber
+			}
 			set = &partitionSet{recordsToSend: newDefaultRecords(batch)}
 			size = recordBatchOverhead
 		} else {
@@ -76,10 +81,11 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 	}
 	fmt.Printf("Adding message with sequence %d to batch for partition %s-%d\n", msg.sequenceNumber, msg.Topic, msg.Partition)
 	set.msgs = append(set.msgs, msg)
-	if ps.parent.conf.Version.IsAtLeast(V0_11_0_0) && msg.sequenceNumber < set.recordsToSend.RecordBatch.FirstSequence {
-		fmt.Printf("@@@@@@@@@@@@@@@@@ adding a message with a smaller sequence number than batch %d\n", set.recordsToSend.RecordBatch.FirstSequence)
-	}
+
 	if ps.parent.conf.Version.IsAtLeast(V0_11_0_0) {
+		if ps.parent.conf.Producer.Idempotent && msg.sequenceNumber < set.recordsToSend.RecordBatch.FirstSequence {
+			return errors.New("Assertion failed: Message out of sequence added to a batch")
+		}
 		// We are being conservative here to avoid having to prep encode the record
 		size += maximumRecordOverhead
 		rec := &Record{
@@ -111,15 +117,6 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 	ps.bufferCount++
 
 	return nil
-}
-
-func (ps *produceSet) setProducerState(batch *RecordBatch, topic string, partition int32, sequence int32) {
-	if ps.parent.txnmgr.Idempotent() {
-		Logger.Printf("Creating a new idempotent batch with base sequence %d\n", sequence)
-		batch.FirstSequence = sequence
-	}
-	batch.ProducerID = ps.parent.txnmgr.ProducerID()
-	batch.ProducerEpoch = ps.parent.txnmgr.ProducerEpoch()
 }
 
 func (ps *produceSet) buildRequest() *ProduceRequest {

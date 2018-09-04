@@ -780,6 +780,7 @@ func TestAsyncProducerIdempotent(t *testing.T) {
 	config.Producer.Flush.Messages = 10
 	config.Producer.Return.Successes = true
 	config.Producer.Retry.Max = 4
+	config.Producer.RequiredAcks = WaitForAll
 	config.Producer.Retry.Backoff = 0
 	config.Producer.Idempotent = true
 	config.Version = V0_11_0_0
@@ -832,6 +833,7 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 	config.Producer.Flush.Messages = 10
 	config.Producer.Return.Successes = true
 	config.Producer.Retry.Max = 4
+	config.Producer.RequiredAcks = WaitForAll
 	config.Producer.Retry.Backoff = 0
 	config.Producer.Idempotent = true
 	config.Version = V0_11_0_0
@@ -860,6 +862,7 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 	prodSuccess.AddTopicPartition("my_topic", 0, ErrNoError)
 	leader.Returns(prodSuccess)
 	expectResults(t, producer, 10, 0)
+
 	seedBroker.Close()
 	leader.Close()
 	closeProducer(t, producer)
