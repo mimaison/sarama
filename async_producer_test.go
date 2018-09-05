@@ -2,6 +2,7 @@ package sarama
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -865,7 +866,7 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 
 func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 	Logger = log.New(os.Stderr, "", log.LstdFlags)
-	broker := NewMockBroker(t, 1)
+	/*broker := NewMockBroker(t, 1)
 
 	clusterID := "cid"
 	metadataResponse := &MetadataResponse{
@@ -884,49 +885,52 @@ func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 		ProducerEpoch: 1,
 	}
 	broker.Returns(initProducerID)
-
+	*/
 	config := NewConfig()
-	config.Producer.Flush.Messages = 10
+	config.Producer.Flush.Messages = 3
 	config.Producer.Return.Successes = true
 	config.Producer.Retry.Max = 4
 	config.Producer.RequiredAcks = WaitForAll
-	config.Producer.Retry.Backoff = 300 * time.Millisecond
+	config.Producer.Retry.Backoff = 100 * time.Millisecond
 	config.Producer.Idempotent = true
 	config.Version = V0_11_0_0
-	producer, err := NewAsyncProducer([]string{broker.Addr()}, config)
+	producer, err := NewAsyncProducer([]string{"localhost:9092"}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 3; i++ {
 		producer.Input() <- &ProducerMessage{Topic: "my_topic", Key: nil, Value: StringEncoder(TestMessage + strconv.Itoa(i))}
 	}
-	prodNotLeader := &ProduceResponse{
+	/*prodNotLeader := &ProduceResponse{
 		Version:      3,
 		ThrottleTime: 0,
 	}
 	prodNotLeader.AddTopicPartition("my_topic", 0, ErrNotEnoughReplicas)
 	broker.Returns(prodNotLeader)
-
+	*/
 	go func() {
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 6; i++ {
 			producer.Input() <- &ProducerMessage{Topic: "my_topic", Key: nil, Value: StringEncoder("goroutine" + strconv.Itoa(i))}
 			time.Sleep(100 * time.Millisecond)
 		}
 	}()
+	/*
+		broker.Returns(metadataResponse)
 
-	broker.Returns(metadataResponse)
+		prodSuccess := &ProduceResponse{
+			Version:      3,
+			ThrottleTime: 0,
+		}
+		prodSuccess.AddTopicPartition("my_topic", 0, ErrNoError)
+		broker.Returns(prodSuccess)*/
+	expectResults(t, producer, 9, 0)
 
-	prodSuccess := &ProduceResponse{
-		Version:      3,
-		ThrottleTime: 0,
-	}
-	prodSuccess.AddTopicPartition("my_topic", 0, ErrNoError)
-	broker.Returns(prodSuccess)
-	expectResults(t, producer, 10, 0)
-
-	broker.Close()
+	fmt.Printf("**** Closing Broker \n")
+	//broker.Close()
+	fmt.Printf("**** Closing producer \n")
 	closeProducer(t, producer)
+	fmt.Printf("**** Closed producer \n")
 }
 
 // This example shows how to use the producer while simultaneously

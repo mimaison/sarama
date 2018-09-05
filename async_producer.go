@@ -383,7 +383,7 @@ func (tp *topicProducer) dispatch() {
 		}
 		if tp.parent.conf.Producer.Idempotent && msg.retries == 0 {
 			msg.sequenceNumber = tp.parent.txnmgr.getAndIncrementSequenceNumber(msg.Topic, msg.Partition)
-			Logger.Printf("Message %s for TP %s-%d got sequence number: %d\n", msg.Value, msg.Topic, msg.Partition, msg.sequenceNumber)
+			//Logger.Printf("Message %s for TP %s-%d got sequence number: %d\n", msg.Value, msg.Topic, msg.Partition, msg.sequenceNumber)
 		}
 
 		handler := tp.handlers[msg.Partition]
@@ -809,7 +809,7 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 			bp.parent.returnErrors(msgs, ErrIncompleteResponse)
 			return
 		}
-
+		fmt.Printf("response has error %v", block.Err)
 		switch block.Err {
 		// Success
 		case ErrNoError:
