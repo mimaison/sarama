@@ -754,9 +754,7 @@ func TestAsyncProducerNoReturns(t *testing.T) {
 }
 
 func TestAsyncProducerIdempotent(t *testing.T) {
-	seedBroker := NewMockBroker(t, 1)
-	leader := NewMockBroker(t, 2)
-	leaderAddr := leader.Addr()
+	broker := NewMockBroker(t, 1)
 
 	clusterID := "cid"
 	metadataResponse := &MetadataResponse{
@@ -765,16 +763,16 @@ func TestAsyncProducerIdempotent(t *testing.T) {
 		ClusterID:      &clusterID,
 		ControllerID:   1,
 	}
-	metadataResponse.AddBroker(leaderAddr, leader.BrokerID())
-	metadataResponse.AddTopicPartition("my_topic", 0, leader.BrokerID(), nil, nil, ErrNoError)
-	seedBroker.Returns(metadataResponse)
+	metadataResponse.AddBroker(broker.Addr(), broker.BrokerID())
+	metadataResponse.AddTopicPartition("my_topic", 0, broker.BrokerID(), nil, nil, ErrNoError)
+	broker.Returns(metadataResponse)
 
 	initProducerID := &InitProducerIDResponse{
 		ThrottleTime:  0,
 		ProducerID:    1000,
 		ProducerEpoch: 1,
 	}
-	seedBroker.Returns(initProducerID)
+	broker.Returns(initProducerID)
 
 	config := NewConfig()
 	config.Producer.Flush.Messages = 10
@@ -784,7 +782,7 @@ func TestAsyncProducerIdempotent(t *testing.T) {
 	config.Producer.Retry.Backoff = 0
 	config.Producer.Idempotent = true
 	config.Version = V0_11_0_0
-	producer, err := NewAsyncProducer([]string{seedBroker.Addr()}, config)
+	producer, err := NewAsyncProducer([]string{broker.Addr()}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -798,18 +796,15 @@ func TestAsyncProducerIdempotent(t *testing.T) {
 		ThrottleTime: 0,
 	}
 	prodSuccess.AddTopicPartition("my_topic", 0, ErrNoError)
-	leader.Returns(prodSuccess)
+	broker.Returns(prodSuccess)
 	expectResults(t, producer, 10, 0)
 
-	seedBroker.Close()
-	leader.Close()
+	broker.Close()
 	closeProducer(t, producer)
 }
 
 func TestAsyncProducerIdempotentRetry(t *testing.T) {
-	seedBroker := NewMockBroker(t, 1)
-	leader := NewMockBroker(t, 2)
-	leaderAddr := leader.Addr()
+	broker := NewMockBroker(t, 1)
 
 	clusterID := "cid"
 	metadataResponse := &MetadataResponse{
@@ -818,16 +813,16 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 		ClusterID:      &clusterID,
 		ControllerID:   1,
 	}
-	metadataResponse.AddBroker(leaderAddr, leader.BrokerID())
-	metadataResponse.AddTopicPartition("my_topic", 0, leader.BrokerID(), nil, nil, ErrNoError)
-	seedBroker.Returns(metadataResponse)
+	metadataResponse.AddBroker(broker.Addr(), broker.BrokerID())
+	metadataResponse.AddTopicPartition("my_topic", 0, broker.BrokerID(), nil, nil, ErrNoError)
+	broker.Returns(metadataResponse)
 
 	initProducerID := &InitProducerIDResponse{
 		ThrottleTime:  0,
 		ProducerID:    1000,
 		ProducerEpoch: 1,
 	}
-	seedBroker.Returns(initProducerID)
+	broker.Returns(initProducerID)
 
 	config := NewConfig()
 	config.Producer.Flush.Messages = 10
@@ -837,7 +832,7 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 	config.Producer.Retry.Backoff = 0
 	config.Producer.Idempotent = true
 	config.Version = V0_11_0_0
-	producer, err := NewAsyncProducer([]string{seedBroker.Addr()}, config)
+	producer, err := NewAsyncProducer([]string{broker.Addr()}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -851,20 +846,19 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 		ThrottleTime: 0,
 	}
 	prodNotLeader.AddTopicPartition("my_topic", 0, ErrNotEnoughReplicas)
-	leader.Returns(prodNotLeader)
+	broker.Returns(prodNotLeader)
 
-	seedBroker.Returns(metadataResponse)
+	broker.Returns(metadataResponse)
 
 	prodSuccess := &ProduceResponse{
 		Version:      3,
 		ThrottleTime: 0,
 	}
 	prodSuccess.AddTopicPartition("my_topic", 0, ErrNoError)
-	leader.Returns(prodSuccess)
+	broker.Returns(prodSuccess)
 	expectResults(t, producer, 10, 0)
 
-	seedBroker.Close()
-	leader.Close()
+	broker.Close()
 	closeProducer(t, producer)
 }
 
