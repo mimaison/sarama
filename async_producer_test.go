@@ -827,6 +827,7 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 	broker.Returns(initProducerID)
 
 	config := NewConfig()
+	config.Metadata.Retry.Backoff = 0
 	config.Producer.Flush.Messages = 10
 	config.Producer.Return.Successes = true
 	config.Producer.Retry.Max = 4
@@ -866,7 +867,7 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 
 func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 	Logger = log.New(os.Stderr, "", log.LstdFlags)
-	/*broker := NewMockBroker(t, 1)
+	broker := NewMockBroker(t, 1)
 
 	clusterID := "cid"
 	metadataResponse := &MetadataResponse{
@@ -877,24 +878,73 @@ func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 	}
 	metadataResponse.AddBroker(broker.Addr(), broker.BrokerID())
 	metadataResponse.AddTopicPartition("my_topic", 0, broker.BrokerID(), nil, nil, ErrNoError)
-	broker.Returns(metadataResponse)
 
-	initProducerID := &InitProducerIDResponse{
+	initProducerIDResponse := &InitProducerIDResponse{
 		ThrottleTime:  0,
 		ProducerID:    1000,
 		ProducerEpoch: 1,
 	}
-	broker.Returns(initProducerID)
-	*/
+
+	prodNotLeaderResponse := &ProduceResponse{
+		Version:      3,
+		ThrottleTime: 0,
+	}
+	prodNotLeaderResponse.AddTopicPartition("my_topic", 0, ErrNotEnoughReplicas)
+
+	prodSuccessResponse := &ProduceResponse{
+		Version:      3,
+		ThrottleTime: 0,
+	}
+	prodSuccessResponse.AddTopicPartition("my_topic", 0, ErrNoError)
+
+	prodCounter := 0
+	lastBatchFirstSeq := -1
+	lastBatchSize := -1
+	handler := func(req *request) (res encoder) {
+		switch req.body.key() {
+		case 3:
+			return metadataResponse
+		case 22:
+			return initProducerIDResponse
+		case 0:
+			prodCounter++
+
+			preq := req.body.(*ProduceRequest)
+			batch := preq.records["my_topic"][0].RecordBatch
+			batchFirstSeq := int(batch.FirstSequence)
+			batchSize := len(batch.Records)
+
+			if lastBatchFirstSeq == batchFirstSeq {
+				if lastBatchSize != batchSize {
+					t.Errorf("Retried Batch firstSeq=%d with different size old=%d new=%d", batchFirstSeq, lastBatchSize, batchSize)
+				}
+			}
+			lastBatchFirstSeq = batchFirstSeq
+			lastBatchSize = batchSize
+
+			if prodCounter%2 == 1 {
+				fmt.Println("**** prodNotLeaderResponse")
+				return prodNotLeaderResponse
+			} else {
+				fmt.Println("**** prodSuccessResponse")
+				return prodSuccessResponse
+			}
+		}
+		return nil
+	}
+
+	broker.setHandler(handler)
+
 	config := NewConfig()
 	config.Producer.Flush.Messages = 3
+	config.Producer.Flush.Frequency = 2 * time.Second
 	config.Producer.Return.Successes = true
 	config.Producer.Retry.Max = 4
 	config.Producer.RequiredAcks = WaitForAll
 	config.Producer.Retry.Backoff = 100 * time.Millisecond
 	config.Producer.Idempotent = true
 	config.Version = V0_11_0_0
-	producer, err := NewAsyncProducer([]string{"localhost:9092"}, config)
+	producer, err := NewAsyncProducer([]string{broker.Addr()}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -902,32 +952,18 @@ func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		producer.Input() <- &ProducerMessage{Topic: "my_topic", Key: nil, Value: StringEncoder(TestMessage + strconv.Itoa(i))}
 	}
-	/*prodNotLeader := &ProduceResponse{
-		Version:      3,
-		ThrottleTime: 0,
-	}
-	prodNotLeader.AddTopicPartition("my_topic", 0, ErrNotEnoughReplicas)
-	broker.Returns(prodNotLeader)
-	*/
+
 	go func() {
-		for i := 0; i < 6; i++ {
+		for i := 0; i < 7; i++ {
 			producer.Input() <- &ProducerMessage{Topic: "my_topic", Key: nil, Value: StringEncoder("goroutine" + strconv.Itoa(i))}
 			time.Sleep(100 * time.Millisecond)
 		}
 	}()
-	/*
-		broker.Returns(metadataResponse)
 
-		prodSuccess := &ProduceResponse{
-			Version:      3,
-			ThrottleTime: 0,
-		}
-		prodSuccess.AddTopicPartition("my_topic", 0, ErrNoError)
-		broker.Returns(prodSuccess)*/
-	expectResults(t, producer, 9, 0)
+	expectResults(t, producer, 10, 0)
 
 	fmt.Printf("**** Closing Broker \n")
-	//broker.Close()
+	broker.Close()
 	fmt.Printf("**** Closing producer \n")
 	closeProducer(t, producer)
 	fmt.Printf("**** Closed producer \n")

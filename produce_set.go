@@ -148,7 +148,7 @@ func (ps *produceSet) buildRequest() *ProduceRequest {
 						record.OffsetDelta = int64(i)
 					}
 				}
-				fmt.Printf("Add batch to ProduceRequest for TP %s-%d with firstSeq %d, size: %d\n", topic, partition, rb.FirstSequence, len(rb.Records))
+				fmt.Printf("**** Add batch to ProduceRequest for TP %s-%d with firstSeq %d, size: %d\n", topic, partition, rb.FirstSequence, len(rb.Records))
 				req.AddBatch(topic, partition, rb)
 				continue
 			}
