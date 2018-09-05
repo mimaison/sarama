@@ -66,7 +66,6 @@ func (t *transactionManager) getAndIncrementSequenceNumber(topic string, partiti
 	defer t.mutex.Unlock()
 	sequence := t.sequenceNumbers[key]
 	t.sequenceNumbers[key] = sequence + 1
-	Logger.Printf("Retriving sequenceNumber of %s, was %d\n", key, sequence)
 	return sequence
 }
 
@@ -384,7 +383,7 @@ func (tp *topicProducer) dispatch() {
 		}
 		if tp.parent.conf.Producer.Idempotent && msg.retries == 0 {
 			msg.sequenceNumber = tp.parent.txnmgr.getAndIncrementSequenceNumber(msg.Topic, msg.Partition)
-			Logger.Printf("Message %s got sequence number: %d\n", msg.Value, msg.sequenceNumber)
+			Logger.Printf("Message %s for TP %s-%d got sequence number: %d\n", msg.Value, msg.Topic, msg.Partition, msg.sequenceNumber)
 		}
 
 		handler := tp.handlers[msg.Partition]
