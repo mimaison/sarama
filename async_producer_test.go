@@ -865,6 +865,15 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 	closeProducer(t, producer)
 }
 
+// type idempotentProducerRetryHandler struct {
+// 	prodCounter int
+// 	lastBatchFirstSeq int
+// 	lastBatchSize int
+// 	lastSequence int
+// 	failBeforeWrite bool
+// }
+// func (h *idempotentProducerRetryHandler) handle()
+
 func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 	//Logger = log.New(os.Stderr, "", log.LstdFlags)
 	broker := NewMockBroker(t, 1)
@@ -900,7 +909,8 @@ func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 	prodCounter := 0
 	lastBatchFirstSeq := -1
 	lastBatchSize := -1
-	handler := func(req *request) (res encoder) {
+	lastSequence := -1
+	handlerFailBeforeWrite := func(req *request) (res encoder) {
 		switch req.body.key() {
 		case 3:
 			return metadataResponse
@@ -914,11 +924,16 @@ func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 			batchFirstSeq := int(batch.FirstSequence)
 			batchSize := len(batch.Records)
 
-			if lastBatchFirstSeq == batchFirstSeq {
+			if lastBatchFirstSeq == batchFirstSeq { // is a retry
 				if lastBatchSize != batchSize {
 					t.Errorf("Retried Batch firstSeq=%d with different size old=%d new=%d", batchFirstSeq, lastBatchSize, batchSize)
 				}
 			}
+
+			if lastSequence+1 != batchFirstSeq {
+				t.Errorf("Out of sequence message lastSequence=%d new batch starts at=%d", lastSequence, batchFirstSeq)
+			}
+
 			lastBatchFirstSeq = batchFirstSeq
 			lastBatchSize = batchSize
 
@@ -927,23 +942,23 @@ func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 				return prodNotLeaderResponse
 			} else {
 				fmt.Println("**** prodSuccessResponse")
+				lastSequence = lastBatchFirstSeq + lastBatchSize - 1
 				return prodSuccessResponse
 			}
 		}
 		return nil
 	}
 
-	broker.setHandler(handler)
-
 	config := NewConfig()
-	//config.Producer.Flush.Messages = 3
-	config.Producer.Flush.Frequency = 50 * time.Millisecond
-	config.Producer.Return.Successes = true
-	config.Producer.Retry.Max = 4
-	config.Producer.RequiredAcks = WaitForAll
-	config.Producer.Retry.Backoff = 100 * time.Millisecond
-	config.Producer.Idempotent = true
 	config.Version = V0_11_0_0
+	config.Producer.Idempotent = true
+	config.Net.MaxOpenRequests = 1
+	config.Producer.RequiredAcks = WaitForAll
+	config.Producer.Return.Successes = true
+	config.Producer.Flush.Frequency = 50 * time.Millisecond
+	config.Producer.Retry.Backoff = 100 * time.Millisecond
+
+	broker.setHandler(handlerFailBeforeWrite)
 	producer, err := NewAsyncProducer([]string{broker.Addr()}, config)
 	if err != nil {
 		t.Fatal(err)
