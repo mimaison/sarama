@@ -858,12 +858,12 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 			bp.buffer.bufferBytes += pSet.bufferBytes
 			bp.buffer.bufferCount += len(pSet.msgs)
 			fmt.Printf("Done Adding failed batch to existing ProduceSet\n")
+			//TODO
+			// synchronize
+			// handle overflow
 
 			bp.output <- bp.buffer
 			bp.rollOver()
-
-			//bp.parent.inFlight.Add(1) // we're generating a syn message; track it so we don't shut down while it's still inflight
-			//bp.parent.input <- &ProducerMessage{Topic: topic, Partition: partition, flags: syn}
 
 		// Other non-retriable errors
 		default:
