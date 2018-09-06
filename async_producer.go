@@ -812,6 +812,7 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 		if block.Err != ErrNoError {
 			fmt.Printf("response block for TP %s-%d has error %v", topic, partition, block.Err)
 		}
+	caseBlock:
 		switch block.Err {
 		// Success
 		case ErrNoError:
@@ -824,14 +825,44 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 				msg.Offset = block.Offset + int64(i)
 			}
 			bp.parent.returnSuccesses(pSet.msgs)
+		// Duplicate
+		case ErrDuplicateSequenceNumber:
+			bp.parent.returnSuccesses(pSet.msgs)
 		// Retriable errors
 		case ErrInvalidMessage, ErrUnknownTopicOrPartition, ErrLeaderNotAvailable, ErrNotLeaderForPartition,
 			ErrRequestTimedOut, ErrNotEnoughReplicas, ErrNotEnoughReplicasAfterAppend:
 			Logger.Printf("producer/broker/%d state change to [retrying] on %s/%d because %v\n",
 				bp.broker.ID(), topic, partition, block.Err)
 			bp.currentRetries[topic][partition] = block.Err
-			bp.parent.retryMessages(pSet.msgs, block.Err)
+			//bp.parent.retryMessages(pSet.msgs, block.Err)
 			bp.parent.retryMessages(bp.buffer.dropPartition(topic, partition), block.Err)
+
+			fmt.Printf("Adding failed batch to existing ProduceSet\n")
+			for _, msg := range pSet.msgs {
+				fmt.Printf("Checking retry count (%d) of %s", msg.retries, msg.Value)
+				if msg.retries >= bp.parent.conf.Producer.Retry.Max {
+					fmt.Printf(" reached max, abort\n")
+					bp.parent.returnError(msg, block.Err)
+					break caseBlock
+				} else {
+					msg.retries++
+					fmt.Printf(" incrementing\n")
+				}
+			}
+			if bp.buffer.msgs[topic] == nil {
+				bp.buffer.msgs[topic] = make(map[int32]*partitionSet)
+			}
+			bp.buffer.msgs[topic][partition] = pSet
+			bp.buffer.bufferBytes += pSet.bufferBytes
+			bp.buffer.bufferCount += len(pSet.msgs)
+			fmt.Printf("Done Adding failed batch to existing ProduceSet\n")
+
+			bp.output <- bp.buffer
+			bp.rollOver()
+
+			//bp.parent.inFlight.Add(1) // we're generating a syn message; track it so we don't shut down while it's still inflight
+			//bp.parent.input <- &ProducerMessage{Topic: topic, Partition: partition, flags: syn}
+
 		// Other non-retriable errors
 		default:
 			bp.parent.returnErrors(pSet.msgs, block.Err)
