@@ -811,7 +811,7 @@ func TestAsyncProducerIdempotentRetryCheckBatch(t *testing.T) {
 		name           string
 		failAfterWrite bool
 	}{
-		// {"FailAfterWrite", true},
+		{"FailAfterWrite", true},
 		{"FailBeforeWrite", false},
 	}
 
@@ -876,46 +876,64 @@ func TestAsyncProducerIdempotentRetryCheckBatch(t *testing.T) {
 				batchFirstSeq := int(batch.FirstSequence)
 				batchSize := len(batch.Records)
 
-				if lastSequenceWrittenToDisk+1 == batchFirstSeq { //in sequence regular append
-					// save batch just received
-					lastBatchFirstSeq = batchFirstSeq
-					lastBatchSize = batchSize
+				if lastSequenceWrittenToDisk == batchFirstSeq-1 { //in sequence append
 
-					if prodCounter%2 == 1 {
-						fmt.Println("**** prodNotLeaderResponse")
-						if test.failAfterWrite {
+					if lastBatchFirstSeq == batchFirstSeq { //is a batch retry
+						if lastBatchSize == batchSize { //good retry
+							fmt.Println("**** prodSuccessResponse for retry")
 							// mock write to disk
-							lastSequenceWrittenToDisk = lastBatchFirstSeq + lastBatchSize - 1
+							lastSequenceWrittenToDisk = batchFirstSeq + batchSize - 1
+							return prodSuccessResponse
+						} else { //bad retry
+							t.Errorf("[%s] Retried Batch firstSeq=%d with different size old=%d new=%d", test.name, batchFirstSeq, lastBatchSize, batchSize)
+							fmt.Println("**** prodOutOfSeq bad retry size 1")
+							// save batch just received ??
+							//lastBatchFirstSeq = batchFirstSeq
+							//lastBatchSize = batchSize
+							return prodOutOfSeq
 						}
-						return prodNotLeaderResponse
-					} else {
-						fmt.Println("**** prodSuccessResponse first time")
-						// mock write to disk
-						lastSequenceWrittenToDisk = lastBatchFirstSeq + lastBatchSize - 1
-						return prodSuccessResponse
-					}
+					} else { // not a retry
+						// save batch just received for future check
+						lastBatchFirstSeq = batchFirstSeq
+						lastBatchSize = batchSize
 
+						if prodCounter%2 == 1 {
+							fmt.Println("**** prodNotLeaderResponse")
+							if test.failAfterWrite {
+								// mock write to disk
+								lastSequenceWrittenToDisk = batchFirstSeq + batchSize - 1
+							}
+							return prodNotLeaderResponse
+						} else {
+							fmt.Println("**** prodSuccessResponse first time")
+							// mock write to disk
+							lastSequenceWrittenToDisk = batchFirstSeq + batchSize - 1
+							return prodSuccessResponse
+						}
+					}
 				} else {
-					if lastBatchFirstSeq == batchFirstSeq && lastBatchSize == batchSize { // is a batch retry
+					if lastBatchFirstSeq == batchFirstSeq && lastBatchSize == batchSize { // is a good batch retry
 						if lastSequenceWrittenToDisk == (batchFirstSeq + batchSize - 1) { // we already have the messages
 							fmt.Println("**** prodDuplicate")
 							return prodDuplicate
 						} else {
 							fmt.Println("**** prodSuccessResponse for retry")
 							// mock write to disk
-							lastSequenceWrittenToDisk = lastBatchFirstSeq + lastBatchSize - 1
+							lastSequenceWrittenToDisk = batchFirstSeq + batchSize - 1
 							return prodSuccessResponse
 						}
 					} else { //out of sequence / bad retried batch
 						if lastBatchFirstSeq == batchFirstSeq && lastBatchSize != batchSize {
+							fmt.Println("**** prodOutOfSeq bad retry size 2")
 							t.Errorf("[%s] Retried Batch firstSeq=%d with different size old=%d new=%d", test.name, batchFirstSeq, lastBatchSize, batchSize)
 						} else if lastSequenceWrittenToDisk+1 != batchFirstSeq {
+							fmt.Println("**** prodOutOfSeq Out of sequence")
 							t.Errorf("[%s] Out of sequence message lastSequence=%d new batch starts at=%d", test.name, lastSequenceWrittenToDisk, batchFirstSeq)
 						} else {
+							fmt.Println("**** prodOutOfSeq Unexpected")
 							t.Errorf("[%s] Unexpected error", test.name)
 						}
 
-						fmt.Println("**** prodOutOfSeq")
 						return prodOutOfSeq
 					}
 				}
