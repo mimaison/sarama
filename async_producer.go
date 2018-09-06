@@ -226,6 +226,7 @@ func (m *ProducerMessage) byteSize(version int) int {
 
 func (m *ProducerMessage) clear() {
 	m.flags = 0
+	fmt.Printf("ProducerMessage clear %v \n", m.Value)
 	m.retries = 0
 }
 
@@ -810,7 +811,7 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 			return
 		}
 		if block.Err != ErrNoError {
-			fmt.Printf("response block for TP %s-%d has error %v", topic, partition, block.Err)
+			fmt.Printf("response block for TP %s-%d has error %v\n", topic, partition, block.Err)
 		}
 	caseBlock:
 		switch block.Err {
@@ -835,6 +836,7 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 				bp.broker.ID(), topic, partition, block.Err)
 			bp.currentRetries[topic][partition] = block.Err
 			//bp.parent.retryMessages(pSet.msgs, block.Err)
+			// dropping the following messages has the side effect of incrementing their retry count
 			bp.parent.retryMessages(bp.buffer.dropPartition(topic, partition), block.Err)
 
 			fmt.Printf("Adding failed batch to existing ProduceSet\n")
@@ -971,6 +973,7 @@ func (p *asyncProducer) retryMessage(msg *ProducerMessage, err error) {
 	if msg.retries >= p.conf.Producer.Retry.Max {
 		p.returnError(msg, err)
 	} else {
+		fmt.Printf("**** retryMessage incrementing %d %v\n", msg.retries, msg.Value)
 		msg.retries++
 		p.retries <- msg
 	}

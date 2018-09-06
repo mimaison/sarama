@@ -806,7 +806,7 @@ func TestAsyncProducerIdempotentGoldenPath(t *testing.T) {
 }
 
 func TestAsyncProducerIdempotentRetryCheckBatch(t *testing.T) {
-	Logger = log.New(os.Stderr, "", log.LstdFlags)
+	//Logger = log.New(os.Stderr, "", log.LstdFlags)
 	tests := []struct {
 		name           string
 		failAfterWrite bool
