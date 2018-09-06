@@ -797,16 +797,16 @@ func (bp *brokerProducer) handleResponse(response *brokerProducerResponse) {
 func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceResponse) {
 	// we iterate through the blocks in the request set, not the response, so that we notice
 	// if the response is missing a block completely
-	sent.eachPartition(func(topic string, partition int32, msgs []*ProducerMessage) {
+	sent.eachPartition(func(topic string, partition int32, pSet *partitionSet) {
 		if response == nil {
 			// this only happens when RequiredAcks is NoResponse, so we have to assume success
-			bp.parent.returnSuccesses(msgs)
+			bp.parent.returnSuccesses(pSet.msgs)
 			return
 		}
 
 		block := response.GetBlock(topic, partition)
 		if block == nil {
-			bp.parent.returnErrors(msgs, ErrIncompleteResponse)
+			bp.parent.returnErrors(pSet.msgs, ErrIncompleteResponse)
 			return
 		}
 		if block.Err != ErrNoError {
@@ -816,25 +816,25 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 		// Success
 		case ErrNoError:
 			if bp.parent.conf.Version.IsAtLeast(V0_10_0_0) && !block.Timestamp.IsZero() {
-				for _, msg := range msgs {
+				for _, msg := range pSet.msgs {
 					msg.Timestamp = block.Timestamp
 				}
 			}
-			for i, msg := range msgs {
+			for i, msg := range pSet.msgs {
 				msg.Offset = block.Offset + int64(i)
 			}
-			bp.parent.returnSuccesses(msgs)
+			bp.parent.returnSuccesses(pSet.msgs)
 		// Retriable errors
 		case ErrInvalidMessage, ErrUnknownTopicOrPartition, ErrLeaderNotAvailable, ErrNotLeaderForPartition,
 			ErrRequestTimedOut, ErrNotEnoughReplicas, ErrNotEnoughReplicasAfterAppend:
 			Logger.Printf("producer/broker/%d state change to [retrying] on %s/%d because %v\n",
 				bp.broker.ID(), topic, partition, block.Err)
 			bp.currentRetries[topic][partition] = block.Err
-			bp.parent.retryMessages(msgs, block.Err)
+			bp.parent.retryMessages(pSet.msgs, block.Err)
 			bp.parent.retryMessages(bp.buffer.dropPartition(topic, partition), block.Err)
 		// Other non-retriable errors
 		default:
-			bp.parent.returnErrors(msgs, block.Err)
+			bp.parent.returnErrors(pSet.msgs, block.Err)
 		}
 	})
 }
@@ -842,19 +842,19 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 func (bp *brokerProducer) handleError(sent *produceSet, err error) {
 	switch err.(type) {
 	case PacketEncodingError:
-		sent.eachPartition(func(topic string, partition int32, msgs []*ProducerMessage) {
-			bp.parent.returnErrors(msgs, err)
+		sent.eachPartition(func(topic string, partition int32, pSet *partitionSet) {
+			bp.parent.returnErrors(pSet.msgs, err)
 		})
 	default:
 		Logger.Printf("producer/broker/%d state change to [closing] because %s\n", bp.broker.ID(), err)
 		bp.parent.abandonBrokerConnection(bp.broker)
 		_ = bp.broker.Close()
 		bp.closing = err
-		sent.eachPartition(func(topic string, partition int32, msgs []*ProducerMessage) {
-			bp.parent.retryMessages(msgs, err)
+		sent.eachPartition(func(topic string, partition int32, pSet *partitionSet) {
+			bp.parent.retryMessages(pSet.msgs, err)
 		})
-		bp.buffer.eachPartition(func(topic string, partition int32, msgs []*ProducerMessage) {
-			bp.parent.retryMessages(msgs, err)
+		bp.buffer.eachPartition(func(topic string, partition int32, pSet *partitionSet) {
+			bp.parent.retryMessages(pSet.msgs, err)
 		})
 		bp.rollOver()
 	}

@@ -194,10 +194,10 @@ func (ps *produceSet) buildRequest() *ProduceRequest {
 	return req
 }
 
-func (ps *produceSet) eachPartition(cb func(topic string, partition int32, msgs []*ProducerMessage)) {
+func (ps *produceSet) eachPartition(cb func(topic string, partition int32, pSet *partitionSet)) {
 	for topic, partitionSet := range ps.msgs {
 		for partition, set := range partitionSet {
-			cb(topic, partition, set.msgs)
+			cb(topic, partition, set)
 		}
 	}
 }
