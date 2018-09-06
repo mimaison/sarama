@@ -866,7 +866,7 @@ func TestAsyncProducerIdempotentRetry(t *testing.T) {
 }
 
 func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
-	Logger = log.New(os.Stderr, "", log.LstdFlags)
+	//Logger = log.New(os.Stderr, "", log.LstdFlags)
 	broker := NewMockBroker(t, 1)
 
 	clusterID := "cid"
@@ -936,8 +936,8 @@ func TestAsyncProducerIdempotentRetryBatch(t *testing.T) {
 	broker.setHandler(handler)
 
 	config := NewConfig()
-	config.Producer.Flush.Messages = 3
-	config.Producer.Flush.Frequency = 2 * time.Second
+	//config.Producer.Flush.Messages = 3
+	config.Producer.Flush.Frequency = 50 * time.Millisecond
 	config.Producer.Return.Successes = true
 	config.Producer.Retry.Max = 4
 	config.Producer.RequiredAcks = WaitForAll

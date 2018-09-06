@@ -809,7 +809,9 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 			bp.parent.returnErrors(msgs, ErrIncompleteResponse)
 			return
 		}
-		fmt.Printf("response has error %v", block.Err)
+		if block.Err != ErrNoError {
+			fmt.Printf("response block for TP %s-%d has error %v", topic, partition, block.Err)
+		}
 		switch block.Err {
 		// Success
 		case ErrNoError:
