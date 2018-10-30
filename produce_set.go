@@ -3,6 +3,7 @@ package sarama
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -59,6 +60,7 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 	set := partitions[msg.Partition]
 	if set == nil {
 		if ps.parent.conf.Version.IsAtLeast(V0_11_0_0) {
+			fmt.Printf("Creating a new batch for partition %s-%d with base sequence %d \n", msg.Topic, msg.Partition, msg.sequenceNumber)
 			batch := &RecordBatch{
 				FirstTimestamp:   timestamp,
 				Version:          2,
@@ -77,6 +79,7 @@ func (ps *produceSet) add(msg *ProducerMessage) error {
 		}
 		partitions[msg.Partition] = set
 	}
+	fmt.Printf("Adding message with sequence %d to batch for partition %s-%d value: %v\n", msg.sequenceNumber, msg.Topic, msg.Partition, msg.Value)
 	set.msgs = append(set.msgs, msg)
 
 	if ps.parent.conf.Version.IsAtLeast(V0_11_0_0) {
@@ -145,6 +148,7 @@ func (ps *produceSet) buildRequest() *ProduceRequest {
 						record.OffsetDelta = int64(i)
 					}
 				}
+				fmt.Printf("Add batch to ProduceRequest for TP %s-%d with firstSeq %d, size: %d\n", topic, partition, rb.FirstSequence, len(rb.Records))
 				req.AddBatch(topic, partition, rb)
 				continue
 			}
@@ -190,10 +194,10 @@ func (ps *produceSet) buildRequest() *ProduceRequest {
 	return req
 }
 
-func (ps *produceSet) eachPartition(cb func(topic string, partition int32, pSet *partitionSet)) {
+func (ps *produceSet) eachPartition(cb func(topic string, partition int32, msgs []*ProducerMessage)) {
 	for topic, partitionSet := range ps.msgs {
 		for partition, set := range partitionSet {
-			cb(topic, partition, set)
+			cb(topic, partition, set.msgs)
 		}
 	}
 }

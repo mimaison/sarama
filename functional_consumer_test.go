@@ -161,7 +161,6 @@ func produceMsgs(t *testing.T, clientVersions []KafkaVersion, codecs []Compressi
 			prodCfg.Producer.Idempotent = idempotent
 			if idempotent {
 				prodCfg.Producer.RequiredAcks = WaitForAll
-				prodCfg.Net.MaxOpenRequests = 1
 			}
 
 			p, err := NewSyncProducer(kafkaBrokers, prodCfg)
