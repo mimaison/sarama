@@ -829,7 +829,15 @@ func (bp *brokerProducer) handleSuccess(sent *produceSet, response *ProduceRespo
 		// Retriable errors
 		case ErrInvalidMessage, ErrUnknownTopicOrPartition, ErrLeaderNotAvailable, ErrNotLeaderForPartition,
 			ErrRequestTimedOut, ErrNotEnoughReplicas, ErrNotEnoughReplicasAfterAppend:
-			retryTopics = append(retryTopics, topic)
+			if !bp.parent.conf.Producer.Idempotent {
+				Logger.Printf("producer/broker/%d state change to [retrying] on %s/%d because %v\n",
+					bp.broker.ID(), topic, partition, block.Err)
+				bp.currentRetries[topic][partition] = block.Err
+				bp.parent.retryMessages(pSet.msgs, block.Err)
+				bp.parent.retryMessages(bp.buffer.dropPartition(topic, partition), block.Err)
+			} else {
+				retryTopics = append(retryTopics, topic)
+			}
 		// Other non-retriable errors
 		default:
 			bp.parent.returnErrors(pSet.msgs, block.Err)
