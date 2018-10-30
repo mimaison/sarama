@@ -760,9 +760,12 @@ func TestAsyncProducerNoReturns(t *testing.T) {
 func TestAsyncProducerIdempotentGoldenPath(t *testing.T) {
 	broker := NewMockBroker(t, 1)
 
+	clusterID := "cid"
 	metadataResponse := &MetadataResponse{
-		Version:      1,
-		ControllerID: 1,
+		Version:        3,
+		ThrottleTimeMs: 0,
+		ClusterID:      &clusterID,
+		ControllerID:   1,
 	}
 	metadataResponse.AddBroker(broker.Addr(), broker.BrokerID())
 	metadataResponse.AddTopicPartition("my_topic", 0, broker.BrokerID(), nil, nil, ErrNoError)
@@ -818,9 +821,12 @@ func TestAsyncProducerIdempotentRetryCheckBatch(t *testing.T) {
 	for _, test := range tests {
 		broker := NewMockBroker(t, 1)
 
+		clusterID := "cid"
 		metadataResponse := &MetadataResponse{
-			Version:      1,
-			ControllerID: 1,
+			Version:        3,
+			ThrottleTimeMs: 0,
+			ClusterID:      &clusterID,
+			ControllerID:   1,
 		}
 		metadataResponse.AddBroker(broker.Addr(), broker.BrokerID())
 		metadataResponse.AddTopicPartition("my_topic", 0, broker.BrokerID(), nil, nil, ErrNoError)
@@ -960,9 +966,12 @@ func TestAsyncProducerIdempotentRetryCheckBatch(t *testing.T) {
 func TestAsyncProducerIdempotentErrorOnOutOfSeq(t *testing.T) {
 	broker := NewMockBroker(t, 1)
 
+	clusterID := "cid"
 	metadataResponse := &MetadataResponse{
-		Version:      1,
-		ControllerID: 1,
+		Version:        3,
+		ThrottleTimeMs: 0,
+		ClusterID:      &clusterID,
+		ControllerID:   1,
 	}
 	metadataResponse.AddBroker(broker.Addr(), broker.BrokerID())
 	metadataResponse.AddTopicPartition("my_topic", 0, broker.BrokerID(), nil, nil, ErrNoError)
